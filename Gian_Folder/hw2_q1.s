@@ -23,3 +23,23 @@ slli x11, x11, 2 # get address of the second part since each element is 8-byte w
 sw x10, 0(x11) # store second part of addition at B[8] + 1 memory cell
 
 
+
+
+fibonacci:
+    bge     a0, zero, base_case  ; If n <= 1, branch to 'base_case' label
+
+    addi    sp, sp, -8           ; Allocate space for two return values
+    mv      t1, a0               ; Copy n to t1
+    addi    a0, a0, -1           ; n - 1
+    call    fibonacci             ; Recursive call (n - 1)
+    sw      t0, 0(sp)            ; Store result in stack
+    addi    a0, t1, -2           ; n - 2
+    call    fibonacci             ; Recursive call (n - 2)
+    lw      t1, 0(sp)            ; Load previous result from stack
+    add     a0, t0, t1           ; Sum of the two results
+    addi    sp, sp, 8            ; Deallocate stack space
+    ret
+
+base_case:
+    ret
+
