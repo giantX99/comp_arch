@@ -1,65 +1,60 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 
-int EX(int choice, char* op, int* X, int* Y){
-    
-    int ALU_out = NULL;
-    
-    if (choice == 0) {                                                  // Memory Reference (load/store address calculation)
-        ALU_out = *X + *Y;
-    } 
-    else if (choice == 1) {                                             // Register-Register Operation
+void EX(){
 
-        if (strcmp(op, "add") == 0) {
-            ALU_out = *X + *Y;
+    EX_MEM.IR = ID_EX.IR;
+    EX_MEM.A = ID_EX.A;
+    EX_MEM.B = ID_EX.B;
+    EX_MEM.Imm = ID_EX.Imm;
 
-        } else if (strcmp(op, "sub") == 0) {
-            ALU_out = *X - *Y;
 
-        } else if (strcmp(op, "mul") == 0) {
-            ALU_out = *X * *Y;
-
-        } else if (strcmp(op, "div") == 0) {
-            ALU_out = *X / *Y;
-
-        } else if (strcmp(op, "shift_left") == 0) {
-            ALU_out = *X << *Y;
-
-        } else if (strcmp(op, "shift_right") == 0) {
-            ALU_out = *X >> *Y;
-
-        } else {
-            printf("Please provide correct Operation argument\n");
-            return NULL;
-        }
-    } 
-    else {                                                              // Register-Immediate Operation
-        
-        if (strcmp(op, "add") == 0) {
-            ALU_out = *X + *Y;
-
-        } else if (strcmp(op, "sub") == 0) {
-            ALU_out = *X - *Y;
-
-        } else if (strcmp(op, "mul") == 0) {
-            ALU_out = *X * *Y;
-
-        } else if (strcmp(op, "div") == 0) {
-            ALU_out = *X / *Y;
-
-        } else if (strcmp(op, "shift_left") == 0) {
-            ALU_out = *X << *Y;
-
-        } else if (strcmp(op, "shift_right") == 0) {
-            ALU_out = *X >> *Y;
-
-        } else {
-            printf("Please provide correct Operation argument\n");
-            return NULL;
-        }
+    char* operator = decoderEX(EX_MEM.IR);
+    uint32_t* X = (EX_MEM.IR);
+    uint32_t* Y = X;
+    if (*EX_MEM.B == NULL) {
+        Y = EX_MEM.Imm;
+    } else {
+        Y = EX_MEM.B;
     }
+    
+    if (strcomp(operator, "mem") == 0) {        // Memory Reference (load/store address calculation)
+        EX_MEM.ALUOutput = *X + *Y;
+    } 
+    else if (strcmp(operator, "add") == 0) {    // Register-Register and Register-Immediate Operation
+        EX_MEM.ALUOutput = *X + *Y;
 
-    return ALU_out;
+    } else if (strcmp(operator, "sub") == 0) {
+        EX_MEM.ALUOutput = *X - *Y;
+
+    } else if (strcmp(operator, "mul") == 0) {
+        EX_MEM.ALUOutput = *X * *Y;
+
+    } else if (strcmp(operator, "div") == 0) {
+        EX_MEM.ALUOutput = *X / *Y;
+
+    } else if (strcmp(operator, "sll") == 0) {
+        EX_MEM.ALUOutput = *X << *Y;
+
+    } else if (strcmp(operator, "srl") == 0) {
+        EX_MEM.ALUOutput = *X >> *Y;
+
+    } else if (strcmp(operator, "and") == 0) {
+        EX_MEM.ALUOutput = *X & *Y;
+
+    } else if (strcmp(operator, "or") == 0) {
+        EX_MEM.ALUOutput = *X | *Y;
+
+    } else if (strcmp(operator, "xor") == 0) {
+        EX_MEM.ALUOutput = *X ^ *Y;
+
+    }   
+
+    else {
+        printf("Operator decoder malfunction\n");
+    }
+    
 }
 
