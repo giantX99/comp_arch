@@ -834,9 +834,9 @@ void MEM()
 	if(strcmp(instruction,"sb") == 0|| strcmp(instruction,"sh") == 0 || strcmp(instruction,"sw") == 0 || strcmp(instruction,"lb") == 0 || strcmp(instruction,"lh") == 0 || strcmp(instruction,"lw") == 0) {
 		MEM_WB.IR = EX_MEM.IR;
 		if(strcmp(instruction,"sb") == 0|| strcmp(instruction,"sh") == 0 || strcmp(instruction,"sw") == 0) {
-			MEM_REGIONS->mem[EX_MEM.ALUOutput] = EX_MEM.B; //store
+			mem_write_32(EX_MEM.ALUOutput, EX_MEM.B); //store
 		} else if(strcmp(instruction,"lb") == 0 || strcmp(instruction,"lh") == 0 || strcmp(instruction,"lw") == 0) {
-			MEM_WB.LMD = MEM_REGIONS->mem[EX_MEM.ALUOutput]; //load
+			MEM_WB.LMD = mem_read_32(EX_MEM.ALUOutput); //load
 		}
 	} else { //ALU Instructs
 		MEM_WB.IR = EX_MEM.IR;
@@ -857,46 +857,46 @@ void EX()
 
 
     char* operator = decoderEX(EX_MEM.IR);
-    uint32_t* X = (EX_MEM.IR);
-    uint32_t* Y = X;
-    if (&EX_MEM.B == NULL) {
-        Y = EX_MEM.imm;
-    } else {
+	uint32_t maskopcode = 0x7F;
+	uint32_t opcode = ID_EX.IR & maskopcode;
+    uint32_t X = (EX_MEM.IR);
+    uint32_t Y = X;
+    if (opcode == 51) {
         Y = EX_MEM.B;
+    } else {
+        Y = EX_MEM.imm;
     }
     
-    if (strcomp(operator, "mem") == 0) {        // Memory Reference (load/store address calculation)
-        EX_MEM.ALUOutput = *X + *Y;
+    if (strcmp(operator, "mem") == 0) {        // Memory Reference (load/store address calculation)
+        EX_MEM.ALUOutput = X + Y;
     } 
     else if (strcmp(operator, "add") == 0) {    // Register-Register and Register-Immediate Operation
-        EX_MEM.ALUOutput = *X + *Y;
+        EX_MEM.ALUOutput = X + Y;
 
     } else if (strcmp(operator, "sub") == 0) {
-        EX_MEM.ALUOutput = *X - *Y;
+        EX_MEM.ALUOutput = X - Y;
 
     } else if (strcmp(operator, "mul") == 0) {
-        EX_MEM.ALUOutput = *X * *Y;
+        EX_MEM.ALUOutput = X * Y;
 
     } else if (strcmp(operator, "div") == 0) {
-        EX_MEM.ALUOutput = *X / *Y;
+        EX_MEM.ALUOutput = X / Y;
 
     } else if (strcmp(operator, "sll") == 0) {
-        EX_MEM.ALUOutput = *X << *Y;
+        EX_MEM.ALUOutput = X << Y;
 
     } else if (strcmp(operator, "srl") == 0) {
-        EX_MEM.ALUOutput = *X >> *Y;
+        EX_MEM.ALUOutput = X >> Y;
 
     } else if (strcmp(operator, "and") == 0) {
-        EX_MEM.ALUOutput = *X & *Y;
+        EX_MEM.ALUOutput = X & Y;
 
     } else if (strcmp(operator, "or") == 0) {
-        EX_MEM.ALUOutput = *X | *Y;
+        EX_MEM.ALUOutput = X | Y;
 
     } else if (strcmp(operator, "xor") == 0) {
-        EX_MEM.ALUOutput = *X ^ *Y;
+        EX_MEM.ALUOutput = X ^ Y;
 
-    }   else {
-        printf("Operator decoder malfunction in EX\n");
     }
     
 }
@@ -906,9 +906,6 @@ void EX()
 /************************************************************/
 void ID()
 {
-	if(IF_ID.IR == NULL){
-		printf("ERROR IR NULL in ID\n");
-	}
 
 	ID_EX.IR = IF_ID.IR;
 	
@@ -924,12 +921,10 @@ void ID()
 		ID_EX.A = CURRENT_STATE.REGS[rs1];
 		uint32_t rs2 = decoderWild(ID_EX.IR);
 		ID_EX.B = CURRENT_STATE.REGS[rs2];;
-        ID_EX.imm = NULL;
 	} else {
 		rs1 = decoderRS1(ID_EX.IR);
-		uint32_t immediate = decorderWild(ID_EX.IR);
+		uint32_t immediate = decoderWild(ID_EX.IR);
 		ID_EX.A = CURRENT_STATE.REGS[rs1];
-        ID_EX.B = NULL;
         ID_EX.imm = immediate;
 	}
 	return;
@@ -940,9 +935,6 @@ void ID()
 /************************************************************/
 void IF()
 {
-	if(CURRENT_STATE.PC == NULL){
-		printf("ERROR PC NULL in IF\n");
-	}
 	IF_ID.IR = mem_read_32(CURRENT_STATE.PC);
 	IF_ID.PC = CURRENT_STATE.PC + 4;
 }
@@ -970,8 +962,8 @@ void print_program(){
 /************************************************************/
 void show_pipeline(){
 	/*IMPLEMENT THIS*/
-	printf("Current PC  %x\n", CURRENT_STATE.PC);
-	printf("IF/ID.IR    %x %s x%d, x%d, x%d\n", IF_ID.IR, decoderOP(IF_ID.IR), decoderRD(IF_ID.IR), decoderRS1(IF_ID.IR), decoderWild(IF_ID.IR));
+	printf("Current PC  	%x\n", CURRENT_STATE.PC);
+	printf("IF/ID.IR    	%x %s x%d, x%d, x%d\n", IF_ID.IR, decoderOP(IF_ID.IR), decoderRD(IF_ID.IR), decoderRS1(IF_ID.IR), decoderWild(IF_ID.IR));
 	printf("IF/ID.PC	%x\n\n", IF_ID.PC);
 	printf("ID/EX.IR	%x %s x%d, x%d, x%d\n", ID_EX.IR, decoderOP(ID_EX.IR), decoderRD(ID_EX.IR), decoderRS1(ID_EX.IR), decoderWild(IF_ID.IR));
 	printf("ID/EX.A		%x\n", ID_EX.A);
@@ -980,10 +972,10 @@ void show_pipeline(){
 	printf("EX/MEM.IR	%x\n", EX_MEM.IR);
 	printf("EX/MEM.A	%x\n", EX_MEM.A);
 	printf("EX/MEM.B	%x\n", EX_MEM.B);
-	printf("EX/MEM.ALUOutput	%x\n", EX_MEM.ALUOutput);
+	printf("EX/MEM.ALUOutput%x\n\n", EX_MEM.ALUOutput);
 	printf("MEM/WB.IR	%x\n", MEM_WB.IR);
-	printf("MEM/WB.ALUOutput	%x\n", MEM_WB.ALUOutput);
-	printf("MEM/WB.LMD	%x\n", MEM_WB.LMD);
+	printf("MEM/WB.ALUOutput%x\n", MEM_WB.ALUOutput);
+	printf("MEM/WB.LMD	%x\n\n", MEM_WB.LMD);
 }
 
 /***************************************************************/
