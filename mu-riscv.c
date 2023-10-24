@@ -69,7 +69,9 @@ void mem_write_32(uint32_t address, uint32_t value)
 /***************************************************************/
 void cycle() {
 	handle_pipeline();
+	show_pipeline();
 	CURRENT_STATE = NEXT_STATE;
+	NEXT_STATE.PC += 4;
 	CYCLE_COUNT++;
 }
 
@@ -261,6 +263,7 @@ void reset() {
 	INSTRUCTION_COUNT = 0;
 	CURRENT_STATE.PC =  MEM_TEXT_BEGIN;
 	NEXT_STATE = CURRENT_STATE;
+	NEXT_STATE.PC += 4;
 	RUN_FLAG = TRUE;
 }
 
@@ -301,6 +304,7 @@ void load_program() {
 		i += 4;
 	}
 	PROGRAM_SIZE = i/4;
+	INSTRUCTION_COUNT = 0;
 	printf("Program loaded into memory.\n%d words written into memory.\n\n", PROGRAM_SIZE);
 	fclose(fp);
 }
@@ -308,6 +312,11 @@ void load_program() {
 //same as decoderOP but returns simpiler definitions for each instruct to implement EX easier
 char * decoderEX(uint32_t ir) 
 {
+	//error checking
+	if(ir == 0)
+	{
+		return "bad";
+	}
 	uint32_t maskopcode = 0x7F;
 	uint32_t opcode = ir & maskopcode;
 	if(opcode == 51) { //R-type
@@ -497,6 +506,11 @@ char * decoderEX(uint32_t ir)
 
 char * decoderOP(uint32_t ir) 
 {
+//error checking
+	if(ir == 0)
+	{
+		return "bad";
+	}
 uint32_t maskopcode = 0x7F;
 	uint32_t opcode = ir & maskopcode;
 	if(opcode == 51) { //R-type
@@ -685,6 +699,11 @@ uint32_t maskopcode = 0x7F;
 }
 
 uint32_t decoderRD(uint32_t ir) {
+	//error checking
+	if(ir == 0)
+	{
+		return 0;
+	}
 	uint32_t maskopcode = 0x7F;
 	uint32_t opcode = ir & maskopcode;
 	if(opcode == 51) { //R-type
@@ -718,6 +737,11 @@ uint32_t decoderRD(uint32_t ir) {
 }
 
 uint32_t decoderRS1(uint32_t ir) {
+	//error checking
+	if(ir == 0)
+	{
+		return 0;
+	}
 	uint32_t maskopcode = 0x7F;
 	uint32_t opcode = ir & maskopcode;
 	if(opcode == 51) { //R-type
@@ -748,6 +772,12 @@ uint32_t decoderRS1(uint32_t ir) {
 }
 
 uint32_t decoderWild(uint32_t ir) {
+	//error checking
+	if(ir == 0)
+	{
+		return 0;
+	}
+	
 	uint32_t maskopcode = 0x7F;
 	uint32_t opcode = ir & maskopcode;
 	if(opcode == 51) { //R-type
@@ -802,6 +832,9 @@ void handle_pipeline()
 	EX();
 	ID();
 	IF();
+	if(INSTRUCTION_COUNT == PROGRAM_SIZE) {
+		RUN_FLAG = FALSE;
+	}
 }
 
 /************************************************************/
@@ -811,6 +844,11 @@ void WB()
 {
 	//figuring out instruction
 	char * instruction = decoderOP(MEM_WB.IR);
+	uint32_t maskopcode = 0x7F;
+	uint32_t opcode = MEM_WB.IR & maskopcode;
+	if(opcode == 0) {
+		return;
+	}
 	//Load/Store Instruction
 	if(strcmp(instruction,"sb") == 0|| strcmp(instruction,"sh") == 0 || strcmp(instruction,"sw") == 0 || strcmp(instruction,"lb") == 0 || strcmp(instruction,"lh") == 0 || strcmp(instruction,"lw") == 0) {
 		if(strcmp(instruction,"lb") == 0 || strcmp(instruction,"lh") == 0 || strcmp(instruction,"lw") == 0) { //load
@@ -821,6 +859,7 @@ void WB()
 		uint32_t rd = decoderRD(MEM_WB.IR);
 		NEXT_STATE.REGS[rd] = MEM_WB.ALUOutput;
 	}
+	INSTRUCTION_COUNT++;
 }
 
 /************************************************************/
@@ -859,8 +898,8 @@ void EX()
     char* operator = decoderEX(EX_MEM.IR);
 	uint32_t maskopcode = 0x7F;
 	uint32_t opcode = ID_EX.IR & maskopcode;
-    uint32_t X = (EX_MEM.IR);
-    uint32_t Y = X;
+    uint32_t X = EX_MEM.A;
+    uint32_t Y;
     if (opcode == 51) {
         Y = EX_MEM.B;
     } else {
@@ -935,8 +974,9 @@ void ID()
 /************************************************************/
 void IF()
 {
+	
 	IF_ID.IR = mem_read_32(CURRENT_STATE.PC);
-	IF_ID.PC = CURRENT_STATE.PC + 4;
+	IF_ID.PC = CURRENT_STATE.PC;
 }
 
 
@@ -947,6 +987,7 @@ void initialize() {
 	init_memory();
 	CURRENT_STATE.PC = MEM_TEXT_BEGIN;
 	NEXT_STATE = CURRENT_STATE;
+	NEXT_STATE.PC += 4;
 	RUN_FLAG = TRUE;
 }
 
@@ -962,10 +1003,19 @@ void print_program(){
 /************************************************************/
 void show_pipeline(){
 	/*IMPLEMENT THIS*/
+	printf("PipeLine execution: %d\n",PIPE_EXECUTE);
 	printf("Current PC  	%x\n", CURRENT_STATE.PC);
-	printf("IF/ID.IR    	%x %s x%d, x%d, x%d\n", IF_ID.IR, decoderOP(IF_ID.IR), decoderRD(IF_ID.IR), decoderRS1(IF_ID.IR), decoderWild(IF_ID.IR));
+	if(strcmp(decoderOP(IF_ID.IR),"bad") != 0) {
+		printf("IF/ID.IR    	%x %s x%d, x%d, x%d\n", IF_ID.IR, decoderOP(IF_ID.IR), decoderRD(IF_ID.IR), decoderRS1(IF_ID.IR), decoderWild(IF_ID.IR));
+	} else {
+		printf("IF/ID.IR\n");
+	}
 	printf("IF/ID.PC	%x\n\n", IF_ID.PC);
-	printf("ID/EX.IR	%x %s x%d, x%d, x%d\n", ID_EX.IR, decoderOP(ID_EX.IR), decoderRD(ID_EX.IR), decoderRS1(ID_EX.IR), decoderWild(IF_ID.IR));
+	if(strcmp(decoderOP(ID_EX.IR),"bad") != 0) {
+		printf("ID/EX.IR	%x %s x%d, x%d, x%d\n", ID_EX.IR, decoderOP(ID_EX.IR), decoderRD(ID_EX.IR), decoderRS1(ID_EX.IR), decoderWild(IF_ID.IR));
+	} else {
+		printf("ID/EX.IR	0\n");
+	}
 	printf("ID/EX.A		%x\n", ID_EX.A);
 	printf("ID/EX.B		%x\n", ID_EX.B);
 	printf("ID/EX.imm	%x\n\n", ID_EX.imm);
@@ -976,6 +1026,7 @@ void show_pipeline(){
 	printf("MEM/WB.IR	%x\n", MEM_WB.IR);
 	printf("MEM/WB.ALUOutput%x\n", MEM_WB.ALUOutput);
 	printf("MEM/WB.LMD	%x\n\n", MEM_WB.LMD);
+	PIPE_EXECUTE++;
 }
 
 /***************************************************************/
