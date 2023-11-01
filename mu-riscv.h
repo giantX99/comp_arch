@@ -1,4 +1,5 @@
 #include <stdint.h>
+#include <stdbool.h>
 
 #define FALSE 0
 #define TRUE  1
@@ -53,6 +54,7 @@ typedef struct CPU_Pipeline_Reg_Struct{
 	uint32_t imm;
 	uint32_t ALUOutput;
 	uint32_t LMD;
+	uint32_t RegWrite;
 	
 } CPU_Pipeline_Reg;
 
@@ -75,6 +77,11 @@ CPU_Pipeline_Reg IF_ID;
 CPU_Pipeline_Reg ID_EX;
 CPU_Pipeline_Reg EX_MEM;
 CPU_Pipeline_Reg MEM_WB;
+
+int ENABLE_FORWARDING = 0;
+bool hazard = false;
+uint32_t forwardA = 0;
+uint32_t forwardB = 0;
 
 char prog_file[32];
 

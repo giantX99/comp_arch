@@ -22,6 +22,7 @@ void help() {
 	printf("low <val>\t-- set the LO register to <val>\n");
 	printf("print\t-- print the program loaded into memory\n");
 	printf("show\t-- print the current content of the pipeline registers\n");
+	printf("forward\t-- enables/disables pipeline forwarding\n");
 	printf("?\t-- display help menu\n");
 	printf("quit\t-- exit the simulator\n\n");
 	printf("------------------------------------------------------------------\n\n");
@@ -70,8 +71,11 @@ void mem_write_32(uint32_t address, uint32_t value)
 void cycle() {
 	handle_pipeline();
 	show_pipeline();
-	CURRENT_STATE = NEXT_STATE;
-	NEXT_STATE.PC += 4;
+	// if hazard is false update pc else pc=pc
+	if(hazard == false) {
+		CURRENT_STATE = NEXT_STATE;
+		NEXT_STATE.PC += 4;
+	}
 	CYCLE_COUNT++;
 }
 
@@ -167,6 +171,17 @@ void handle_command() {
 	}
 
 	switch(buffer[0]) {
+		case 'F':
+		case 'f':
+			if(buffer[1] == 'o' || buffer[1] == 'O') {
+				if(ENABLE_FORWARDING == 0) {
+					ENABLE_FORWARDING = 1;
+				} else {
+					ENABLE_FORWARDING = 0;
+				}
+				ENABLE_FORWARDING == 0 ? printf("Forwarding OFF\n") : printf("Forwarding ON\n");
+			}
+			break;
 		case 'S':
 		case 's':
 			if (buffer[1] == 'h' || buffer[1] == 'H'){
@@ -265,6 +280,7 @@ void reset() {
 	NEXT_STATE = CURRENT_STATE;
 	NEXT_STATE.PC += 4;
 	RUN_FLAG = TRUE;
+	PIPE_EXECUTE = 1;
 }
 
 /***************************************************************/
@@ -826,12 +842,12 @@ void handle_pipeline()
 {
 	/*INSTRUCTION_COUNT should be incremented when instruction is done*/
 	/*Since we do not have branch/jump instructions, INSTRUCTION_COUNT should be incremented in WB stage */
-
 	WB();
 	MEM();
 	EX();
 	ID();
 	IF();
+	// if statements for data hazard; set hazard to true if necessary
 	if(INSTRUCTION_COUNT == PROGRAM_SIZE) {
 		RUN_FLAG = FALSE;
 	}
@@ -842,8 +858,15 @@ void handle_pipeline()
 /************************************************************/
 void WB()
 {
+	
 	//figuring out instruction
 	char * instruction = decoderOP(MEM_WB.IR);
+	//all instructions use write, unless no instruction is loaded
+	if(strcmp(instruction, "bad") == 0) {
+		EX_MEM.RegWrite = false;
+	} else {
+		EX_MEM.RegWrite = true;
+	}
 	uint32_t maskopcode = 0x7F;
 	uint32_t opcode = MEM_WB.IR & maskopcode;
 	if(opcode == 0) {
@@ -869,6 +892,17 @@ void MEM()
 {
 	//figuring out instruction
 	char * instruction = decoderOP(EX_MEM.IR);
+	//all instructions use write, unless no instruction is loaded
+	if(strcmp(instruction, "bad") == 0) {
+		EX_MEM.RegWrite = false;
+	} else {
+		EX_MEM.RegWrite = true;
+	}
+	uint32_t maskopcode = 0x7F;
+	uint32_t opcode = EX_MEM.IR & maskopcode;
+	if(opcode == 0) {
+		return;
+	}
 	//Load/Store Instruction
 	if(strcmp(instruction,"sb") == 0|| strcmp(instruction,"sh") == 0 || strcmp(instruction,"sw") == 0 || strcmp(instruction,"lb") == 0 || strcmp(instruction,"lh") == 0 || strcmp(instruction,"lw") == 0) {
 		MEM_WB.IR = EX_MEM.IR;
@@ -881,6 +915,22 @@ void MEM()
 		MEM_WB.IR = EX_MEM.IR;
 		MEM_WB.ALUOutput = EX_MEM.ALUOutput;
 	}
+	switch(ENABLE_FORWARDING) {
+		case 1:
+			if(MEM_WB.RegWrite && (decoderRD(MEM_WB.IR) != 0) &&
+			(decoderRD(MEM_WB.IR) == decoderRS1(ID_EX.IR))) {
+				forwardA = MEM_WB.ALUOutput;
+				EX_MEM.RegWrite = false;
+			}
+			if(MEM_WB.RegWrite && (decoderRD(MEM_WB.IR) != 0) &&
+			(decoderRD(MEM_WB.IR) == decoderWild(ID_EX.IR))) {
+				forwardB = MEM_WB.ALUOutput;
+				EX_MEM.RegWrite = false;
+			}
+			break;
+		default:
+			break;
+	}
 	return;
 }
 
@@ -888,16 +938,19 @@ void MEM()
 /* execution (EX) pipeline stage:                                                                          */
 /************************************************************/
 void EX()
-{
+{	
+	
 	EX_MEM.IR = ID_EX.IR;
     EX_MEM.A = ID_EX.A;
     EX_MEM.B = ID_EX.B;
     EX_MEM.imm = ID_EX.imm;
 
-
     char* operator = decoderEX(EX_MEM.IR);
 	uint32_t maskopcode = 0x7F;
 	uint32_t opcode = ID_EX.IR & maskopcode;
+	if(opcode == 0) {
+		return;
+	}
     uint32_t X = EX_MEM.A;
     uint32_t Y;
     if (opcode == 51) {
@@ -937,6 +990,22 @@ void EX()
         EX_MEM.ALUOutput = X ^ Y;
 
     }
+	switch(ENABLE_FORWARDING) {
+		case 1:
+			if(EX_MEM.RegWrite && (decoderRD(EX_MEM.IR) != 0) &&
+			(decoderRD(EX_MEM.IR) == decoderRS1(ID_EX.IR))) {
+				forwardA = EX_MEM.ALUOutput;
+				EX_MEM.RegWrite = false;
+			}
+			if(EX_MEM.RegWrite && (decoderRD(EX_MEM.IR) != 0) &&
+			(decoderRD(EX_MEM.IR) == decoderWild(ID_EX.IR))) {
+				forwardB = EX_MEM.ALUOutput;
+				EX_MEM.RegWrite = false;
+			}
+			break;
+		default:
+			break;
+	}
     
 }
 
@@ -945,26 +1014,62 @@ void EX()
 /************************************************************/
 void ID()
 {
-
 	ID_EX.IR = IF_ID.IR;
+	uint32_t maskopcode = 0x7F;
+	uint32_t opcode = ID_EX.IR & maskopcode;
+	if(opcode == 0) {
+		return;
+	}
 	
+	if(EX_MEM.RegWrite && (decoderRD(EX_MEM.IR) != 0) &&
+	(decoderRD(EX_MEM.IR) == decoderRS1(ID_EX.IR))) {
+		printf("%x,%x,%x\n",EX_MEM.RegWrite,decoderRD(EX_MEM.IR), decoderRS1(ID_EX.IR));
+		//Stall
+		hazard = true;
+	}
+	else if(EX_MEM.RegWrite && (decoderRD(EX_MEM.IR) != 0) &&
+	(decoderRD(EX_MEM.IR) == decoderWild(ID_EX.IR))) {
+		//Stall
+		hazard = true;
+	}
+	else if(MEM_WB.RegWrite && (decoderRD(MEM_WB.IR) != 0) &&
+	(decoderRD(MEM_WB.IR) == decoderRS1(ID_EX.IR))) {
+		//Stall
+		hazard = true;
+	}
+	else if(MEM_WB.RegWrite && (decoderRD(MEM_WB.IR) != 0) &&
+	(decoderRD(MEM_WB.IR) == decoderWild(ID_EX.IR))) {
+		//Stall
+		hazard = true;
+	} else {
+	hazard = false;
 	// Storing rs1 and rs2 into temp registers 
 	//both decoders would need to be pass by refrence so I can access the different needed fields
 	
-
-	uint32_t maskopcode = 0x7F;
-	uint32_t opcode = ID_EX.IR & maskopcode;
 	uint32_t rs1;
 	if(opcode == 51) { //reg-reg instruction
 		rs1 = decoderRS1(ID_EX.IR);
 		ID_EX.A = CURRENT_STATE.REGS[rs1];
+		if(forwardA != 0) {
+			ID_EX.A = forwardA;
+			forwardA = 0;
+		}
 		uint32_t rs2 = decoderWild(ID_EX.IR);
-		ID_EX.B = CURRENT_STATE.REGS[rs2];;
+		ID_EX.B = CURRENT_STATE.REGS[rs2];
+		if(forwardB != 0) {
+			ID_EX.B = forwardB;
+			forwardB = 0;
+		}
 	} else {
 		rs1 = decoderRS1(ID_EX.IR);
 		uint32_t immediate = decoderWild(ID_EX.IR);
 		ID_EX.A = CURRENT_STATE.REGS[rs1];
+		if(forwardA != 0) {
+			ID_EX.A = forwardA;
+			forwardA = 0;
+		}
         ID_EX.imm = immediate;
+	}
 	}
 	return;
 }
@@ -974,9 +1079,32 @@ void ID()
 /************************************************************/
 void IF()
 {
-	
+	if(EX_MEM.RegWrite && (decoderRD(EX_MEM.IR) != 0) &&
+	(decoderRD(EX_MEM.IR) == decoderRS1(ID_EX.IR))) {
+		printf("%x,%x,%x\n",EX_MEM.RegWrite,decoderRD(EX_MEM.IR), decoderRS1(ID_EX.IR));
+		//Stall
+		hazard = true;
+	}
+	else if(EX_MEM.RegWrite && (decoderRD(EX_MEM.IR) != 0) &&
+	(decoderRD(EX_MEM.IR) == decoderWild(ID_EX.IR))) {
+		//Stall
+		hazard = true;
+	}
+	else if(MEM_WB.RegWrite && (decoderRD(MEM_WB.IR) != 0) &&
+	(decoderRD(MEM_WB.IR) == decoderRS1(ID_EX.IR))) {
+		//Stall
+		hazard = true;
+	}
+	else if(MEM_WB.RegWrite && (decoderRD(MEM_WB.IR) != 0) &&
+	(decoderRD(MEM_WB.IR) == decoderWild(ID_EX.IR))) {
+		//Stall
+		hazard = true;
+	} else {
+	hazard = false;
 	IF_ID.IR = mem_read_32(CURRENT_STATE.PC);
 	IF_ID.PC = CURRENT_STATE.PC;
+	}
+	return;
 }
 
 
